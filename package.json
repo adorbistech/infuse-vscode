@@ -1,0 +1,105 @@
+{
+  "name": "infuse",
+  "displayName": "INFUSE",
+  "description": "Execution intelligence and runtime governance for autonomous AI agents in VS Code.",
+  "version": "0.1.0",
+  "publisher": "adorbistech",
+  "engines": {
+    "vscode": "^1.102.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "infuse",
+    "mcp",
+    "model-context-protocol",
+    "governance",
+    "ai-agents",
+    "execution-intelligence",
+    "autonomous-agents",
+    "runtime-governance"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adorbistech/infuse-vscode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/adorbistech/infuse-vscode/issues"
+  },
+  "homepage": "https://infuse.adorbistech.com",
+  "icon": "images/icon.png",
+  "license": "Apache-2.0",
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "infuse.mcp-servers",
+        "label": "INFUSE"
+      }
+    ],
+    "commands": [
+      {
+        "command": "infuse.testConnection",
+        "title": "Test MCP Connection",
+        "category": "INFUSE"
+      },
+      {
+        "command": "infuse.showStatus",
+        "title": "Show Status & Telemetry",
+        "category": "INFUSE"
+      },
+      {
+        "command": "infuse.openDocs",
+        "title": "Open Documentation",
+        "category": "INFUSE"
+      }
+    ],
+    "configuration": {
+      "title": "INFUSE",
+      "properties": {
+        "infuse.endpoint": {
+          "type": "string",
+          "default": "https://infuse-api.adorbistech.com/mcp",
+          "description": "Canonical Remote MCP endpoint URL for INFUSE."
+        },
+        "infuse.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable INFUSE MCP server definition provider."
+        },
+        "infuse.logLevel": {
+          "type": "string",
+          "enum": [
+            "info",
+            "debug",
+            "error"
+          ],
+          "default": "info",
+          "description": "Logging verbosity level for INFUSE output channel."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./tsconfig.json",
+    "watch": "tsc -watch -p ./tsconfig.json",
+    "compile:test": "tsc -p ./tsconfig.test.json",
+    "pretest": "npm run compile:test",
+    "test": "node ./out_test/test/runTests.js",
+    "validate": "npm run compile:test && node ./out_test/test/validate.js",
+    "package": "vsce package --no-git-tag-version"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/vscode": "^1.102.0",
+    "@vscode/vsce": "^3.2.0",
+    "typescript": "^5.7.0"
+  }
+}
