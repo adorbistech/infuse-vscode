@@ -32,10 +32,15 @@ export class InfuseMcpServerDefinitionProvider
     }
 
     const endpoint = config.get<string>('endpoint', DEFAULT_MCP_ENDPOINT);
-    this.logger.debug(`Providing INFUSE MCP server definition: ${endpoint}`);
+    if (!endpoint || typeof endpoint !== 'string' || !/^https?:\/\//i.test(endpoint.trim())) {
+      this.logger.error(`Invalid MCP endpoint configured: "${endpoint}". Must be a valid HTTP/HTTPS URL.`);
+      return [];
+    }
+
+    this.logger.debug(`Providing INFUSE MCP server definition: ${endpoint.trim()}`);
 
     try {
-      const uri = vscode.Uri.parse(endpoint);
+      const uri = vscode.Uri.parse(endpoint.trim());
       const serverDefinition = new vscode.McpHttpServerDefinition(
         PROVIDER_LABEL,
         uri,

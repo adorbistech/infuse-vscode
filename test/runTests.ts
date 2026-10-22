@@ -31,9 +31,13 @@ async function run(): Promise<void> {
   console.log('INFUSE VS Code Adapter — Test Suite Execution');
   console.log('============================================================\n');
 
-  // Load tests
+  // Load unit and mock tests
   require('./unit.test');
-  require('./liveEndpoint.test');
+
+  // Only load live endpoint integration tests if explicitly requested
+  if (process.env.INFUSE_LIVE_TEST === 'true') {
+    require('./liveEndpoint.test');
+  }
 
   let passed = 0;
   let failed = 0;

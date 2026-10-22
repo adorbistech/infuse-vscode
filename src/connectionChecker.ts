@@ -34,6 +34,18 @@ export class ConnectionChecker {
   ): Promise<McpConnectionStatus> {
     const startTime = Date.now();
     try {
+      if (!endpoint || typeof endpoint !== 'string' || !/^https?:\/\//i.test(endpoint.trim())) {
+        return {
+          success: false,
+          endpoint: endpoint || '',
+          discoveredTools: [],
+          latencyMs: 0,
+          error: 'Invalid endpoint URL: must begin with http:// or https://',
+        };
+      }
+
+      const trimmedEndpoint = endpoint.trim();
+
       // 1. Send initialize request
       const initPayload = {
         jsonrpc: '2.0',
@@ -52,22 +64,25 @@ export class ConnectionChecker {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-      const initResponse = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json, text/event-stream',
-        },
-        body: JSON.stringify(initPayload),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeout);
+      let initResponse: Response;
+      try {
+        initResponse = await fetch(trimmedEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/event-stream',
+          },
+          body: JSON.stringify(initPayload),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!initResponse.ok) {
         return {
           success: false,
-          endpoint,
+          endpoint: trimmedEndpoint,
           discoveredTools: [],
           latencyMs: Date.now() - startTime,
           error: `HTTP ${initResponse.status}: ${initResponse.statusText}`,
@@ -91,28 +106,43 @@ export class ConnectionChecker {
         headers['mcp-session-id'] = sessionId;
       }
 
-      await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'notifications/initialized',
-        }),
-      }).catch(() => {
-        // notification failures should not abort tool discovery
-      });
+      const notifyController = new AbortController();
+      const notifyTimeout = setTimeout(() => notifyController.abort(), Math.min(timeoutMs, 3000));
+      try {
+        await fetch(trimmedEndpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            method: 'notifications/initialized',
+          }),
+          signal: notifyController.signal,
+        }).catch(() => {
+          // notification failures should not abort tool discovery
+        });
+      } finally {
+        clearTimeout(notifyTimeout);
+      }
 
       // 3. Send tools/list request
-      const toolsResponse = await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 2,
-          method: 'tools/list',
-          params: {},
-        }),
-      });
+      const toolsController = new AbortController();
+      const toolsTimeout = setTimeout(() => toolsController.abort(), timeoutMs);
+      let toolsResponse: Response;
+      try {
+        toolsResponse = await fetch(trimmedEndpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 2,
+            method: 'tools/list',
+            params: {},
+          }),
+          signal: toolsController.signal,
+        });
+      } finally {
+        clearTimeout(toolsTimeout);
+      }
 
       let discoveredTools: string[] = [];
       if (toolsResponse.ok) {
@@ -125,7 +155,7 @@ export class ConnectionChecker {
 
       return {
         success: true,
-        endpoint,
+        endpoint: trimmedEndpoint,
         serverName: serverName || CANONICAL_SERVER_NAME,
         serverVersion: serverVersion || CANONICAL_SERVER_VERSION,
         protocolVersion: protocolVersion || MCP_PROTOCOL_VERSION,
@@ -137,7 +167,7 @@ export class ConnectionChecker {
       const errorMessage = err instanceof Error ? err.message : String(err);
       return {
         success: false,
-        endpoint,
+        endpoint: endpoint || '',
         discoveredTools: [],
         latencyMs: Date.now() - startTime,
         error: errorMessage,
@@ -154,7 +184,10 @@ export class ConnectionChecker {
       const trimmed = line.trim();
       if (trimmed.startsWith('data: ')) {
         try {
-          return JSON.parse(trimmed.substring(6));
+          const parsed = JSON.parse(trimmed.substring(6));
+          if (parsed && typeof parsed === 'object') {
+            return parsed;
+          }
         } catch {
           // continue parsing next line
         }

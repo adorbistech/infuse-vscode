@@ -4,10 +4,16 @@
 
 The **INFUSE Visual Studio Code Extension** is a thin client adapter that connects VS Code language models and agent tools to the canonical remote INFUSE Model Context Protocol (MCP) service.
 
-- **Zero Credential Storage**: The extension does not store, intercept, persist, or transmit LLM provider API keys, user secrets, or private tokens.
-- **No Embedded Secrets**: No API keys, credentials, or production tokens are embedded in the source code, packaging, or committed repository artifacts.
-- **Authoritative Backend Boundary**: All policy evaluations, runtime state validations, Governor interventions, and Execution Control Boundary (ECB) safety limits are enforced remotely on the authoritative INFUSE Core service.
-- **Encrypted Transport**: All communication with the remote MCP service is conducted strictly over encrypted HTTPS (`TLS 1.2` or higher).
+### Governed Execution Paths
+* **Remote MCP Tool Invocations:** Agent tool executions routed to the 12 canonical INFUSE MCP tools (`infuse_execute`, `infuse_control`, `infuse_update_policy`, etc.) pass directly to the authoritative INFUSE Core backend.
+* **Authoritative Policy & Governor Evaluation:** All task classifications, policy thresholds, Governor regulation signals (`CONTINUE`, `THROTTLE`, `SWITCH`, `STOP`), and cost/token tracking are evaluated and enforced remotely by INFUSE Core.
+* **Zero Credential Storage:** The extension does not store, intercept, persist, or transmit LLM provider API keys, user secrets, or private tokens.
+* **Encrypted Transport:** All communication with the remote MCP service is conducted strictly over encrypted HTTPS (`TLS 1.2` or higher).
+
+### Platform Boundaries (Ungoverned Routes)
+* **Native Host Model Inference:** Direct Copilot and VS Code Language Model token generation occurs out-of-band directly with LLM providers and does not route through MCP tool servers.
+* **Native VS Code Tool & Editor Operations:** Direct VS Code terminal executions, workspace file modifications, and internal extension commands are governed solely by VS Code platform permissions and do not pass through MCP providers.
+* **Third-Party MCP Servers:** Out-of-band MCP servers configured in VS Code settings operate independently and do not route through INFUSE.
 
 ## Supported Versions
 

@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as http from 'http';
 import {
   DEFAULT_MCP_ENDPOINT,
   CANONICAL_SERVER_NAME,
@@ -9,6 +10,7 @@ import {
   PROVIDER_ID,
   CANONICAL_TOOLS,
 } from '../src/constants';
+import { ConnectionChecker } from '../src/connectionChecker';
 
 describe('INFUSE Adapter Unit Tests', () => {
   it('should define canonical MCP constants correctly', () => {
@@ -86,6 +88,7 @@ describe('INFUSE Adapter Unit Tests', () => {
           entry.name === 'node_modules' ||
           entry.name === '.git' ||
           entry.name === 'out' ||
+          entry.name === 'out_test' ||
           entry.name === 'images' ||
           entry.name.endsWith('.vsix')
         ) {
@@ -108,5 +111,108 @@ describe('INFUSE Adapter Unit Tests', () => {
     }
 
     scanDir(repoRoot);
+  });
+
+  it('should reject invalid or non-HTTP endpoint URLs', async () => {
+    const invalidEndpoints = [
+      '',
+      '   ',
+      'ftp://example.com/mcp',
+      'file:///etc/passwd',
+      'javascript:alert(1)',
+    ];
+
+    for (const ep of invalidEndpoints) {
+      const res = await ConnectionChecker.testConnection(ep);
+      assert.strictEqual(res.success, false);
+      assert.ok(res.error && res.error.includes('Invalid endpoint URL'));
+    }
+  });
+
+  it('should successfully perform MCP handshake and tool discovery against local mock server', async () => {
+    const server = http.createServer((req, res) => {
+      let body = '';
+      req.on('data', (chunk) => { body += chunk; });
+      req.on('end', () => {
+        const payload = JSON.parse(body || '{}');
+        if (payload.method === 'initialize') {
+          res.writeHead(200, {
+            'Content-Type': 'application/json',
+            'mcp-session-id': 'mock-session-xyz',
+          });
+          res.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: payload.id,
+              result: {
+                protocolVersion: MCP_PROTOCOL_VERSION,
+                serverInfo: {
+                  name: CANONICAL_SERVER_NAME,
+                  version: CANONICAL_SERVER_VERSION,
+                },
+                capabilities: { tools: {} },
+              },
+            })
+          );
+        } else if (payload.method === 'notifications/initialized') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end();
+        } else if (payload.method === 'tools/list') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              jsonrpc: '2.0',
+              id: payload.id,
+              result: {
+                tools: CANONICAL_TOOLS.map((t) => ({
+                  name: t.name,
+                  description: t.description,
+                  inputSchema: { type: 'object' },
+                })),
+              },
+            })
+          );
+        } else {
+          res.writeHead(400);
+          res.end();
+        }
+      });
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as any).port;
+    const mockUrl = `http://127.0.0.1:${port}/mcp`;
+
+    try {
+      const result = await ConnectionChecker.testConnection(mockUrl, 3000);
+      assert.strictEqual(result.success, true);
+      assert.strictEqual(result.serverName, CANONICAL_SERVER_NAME);
+      assert.strictEqual(result.serverVersion, CANONICAL_SERVER_VERSION);
+      assert.strictEqual(result.sessionId, 'mock-session-xyz');
+      assert.strictEqual(result.discoveredTools.length, 12);
+      assert.deepStrictEqual(result.discoveredTools, CANONICAL_TOOLS.map((t) => t.name));
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('should handle mock server HTTP 500 error gracefully', async () => {
+    const server = http.createServer((_req, res) => {
+      res.writeHead(500, { 'Content-Type': 'text/plain' });
+      res.end('Internal Server Error');
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const port = (server.address() as any).port;
+    const mockUrl = `http://127.0.0.1:${port}/mcp`;
+
+    try {
+      const result = await ConnectionChecker.testConnection(mockUrl, 3000);
+      assert.strictEqual(result.success, false);
+      assert.ok(result.error && result.error.includes('HTTP 500'));
+      assert.strictEqual(result.discoveredTools.length, 0);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 });
